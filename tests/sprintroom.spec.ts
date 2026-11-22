@@ -27,10 +27,9 @@ test('owner invites a viewer; tasks sync live; viewer is read-only; presence sho
 
   // Owner adds the guest as a viewer.
   await owner.page.locator('#invite').click()
-  await owner.page.getByLabel('Email or exact display name').fill(owner.email === guest.email ? '' : guest.email)
-  await owner.page.getByLabel('Role', { exact: true }).selectOption('viewer')
+  await owner.page.getByLabel('Email or exact display name').fill(guest.email)
+  await owner.page.locator('select[name=role]').selectOption('viewer')
   await owner.page.getByRole('button', { name: 'Add member' }).click()
-  await owner.page.getByRole('button', { name: 'Close' }).click().catch(() => {})
 
   // The project appears live for the guest, no reload.
   await expect(guest.page.getByRole('button', { name: new RegExp(project) })).toBeVisible({ timeout: 15_000 })

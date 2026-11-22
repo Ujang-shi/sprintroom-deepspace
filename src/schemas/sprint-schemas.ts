@@ -43,12 +43,12 @@ export const teamMembersSchema: CollectionSchema = {
   name: 'team_members',
   columns: [
     { name: 'teamId', storage: 'text', interpretation: { kind: 'plain' }, required: true },
-    { name: 'userId', storage: 'text', interpretation: { kind: 'plain' }, required: true },
+    { name: 'UserId', storage: 'text', interpretation: { kind: 'plain' }, required: true },
     { name: 'status', storage: 'text', interpretation: { kind: 'select', options: ['active', 'removed'] }, default: 'active' },
     { name: 'role', storage: 'text', interpretation: { kind: 'select', options: ['owner', 'editor', 'viewer'] }, default: 'viewer' },
     { name: 'name', storage: 'text', interpretation: { kind: 'plain' }, maxLength: 160 },
   ],
-  uniqueOn: ['teamId', 'userId'],
+  uniqueOn: ['teamId', 'UserId'],
   teamField: 'teamId',
   permissions: memberScoped,
 }

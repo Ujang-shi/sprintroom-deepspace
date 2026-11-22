@@ -13,7 +13,7 @@ import { can, computeInsights, type ProjectRole } from '../lib/sprint'
 import './sprintroom.css'
 
 interface ProjectRow { name: string; ownerId?: string }
-interface MemberRow { teamId: string; userId: string; role: ProjectRole; name?: string; status?: string }
+interface MemberRow { teamId: string; UserId: string; userId: string; role: ProjectRole; name?: string; status?: string }
 interface TaskRow {
   projectId: string
   title: string
@@ -83,7 +83,7 @@ function SignedInWorkspace({ userId }: { userId: string }) {
   const insightQ = useQuery<InsightRow>('sprint_insights', { where: projectId ? { projectId } : { projectId: '__none__' } })
 
   const members = useMemo(
-    () => membersQ.records.filter((m) => !m.data.status || m.data.status === 'active').map((m) => ({ id: m.data.userId, ...m.data })),
+    () => membersQ.records.filter((m) => !m.data.status || m.data.status === 'active').map((m) => ({ id: m.data.UserId, ...m.data, userId: m.data.UserId })),
     [membersQ.records],
   )
   const tasks: Task[] = useMemo(() => tasksQ.records.map((r) => ({ id: r.recordId, ...r.data })), [tasksQ.records])

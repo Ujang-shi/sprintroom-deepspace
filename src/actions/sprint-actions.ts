@@ -46,7 +46,7 @@ async function getRole(tools: ActionTools, projectId: string, userId: string): P
   const res = await tools.get<Row>('team_members', memberId(projectId, userId))
   if (!res.success) return null
   const row = res.data.record.data
-  if (row.teamId !== projectId || row.userId !== userId) return null
+  if (row.teamId !== projectId || row.UserId !== userId) return null
   if (row.status && row.status !== 'active') return null
   const role = String(row.role ?? '')
   return (PROJECT_ROLES as readonly string[]).includes(role) ? (role as ProjectRole) : null
@@ -130,7 +130,7 @@ export function makeSprintActions<E>(deps: SprintActionDeps<E>): Record<string, 
       const projectId = created.data.recordId
       const m = await tools.create(
         'team_members',
-        { teamId: projectId, userId, status: 'active', role: 'owner', name: await displayName(tools, userId) },
+        { teamId: projectId, UserId: userId, status: 'active', role: 'owner', name: await displayName(tools, userId) },
         memberId(projectId, userId),
       )
       if (!m.success) {
@@ -156,7 +156,7 @@ export function makeSprintActions<E>(deps: SprintActionDeps<E>): Record<string, 
       if (existing === 'owner') return fail('That user already owns this project', 'bad_request')
       const res = await tools.create(
         'team_members',
-        { teamId: a.projectId, userId: target.recordId, status: 'active', role, name: sanitize(target.data.name || target.data.email || target.recordId) },
+        { teamId: a.projectId, UserId: target.recordId, status: 'active', role, name: sanitize(target.data.name || target.data.email || target.recordId) },
         memberId(a.projectId, target.recordId),
       )
       return res.success ? ok({ userId: target.recordId, role }) : res
@@ -211,7 +211,7 @@ export function makeSprintActions<E>(deps: SprintActionDeps<E>): Record<string, 
     createTask: async ({ userId, params, tools }) => {
       const a = await authorize(tools, userId, params.projectId, 'task.write')
       if (!a.ok) return a.res
-      const members = new Set((await activeMembers(tools, a.projectId)).map((m) => String(m.data.userId)))
+      const members = new Set((await activeMembers(tools, a.projectId)).map((m) => String(m.data.UserId)))
       const parsed = parseTaskPatch({ ...params, status: params.status ?? 'todo', priority: params.priority ?? 'medium' }, members, { partial: false })
       if (!parsed.ok) return fail(parsed.error, 'bad_request')
       const res = await tools.create('tasks', { blocked: 0, ...parsed.data, projectId: a.projectId })
@@ -225,7 +225,7 @@ export function makeSprintActions<E>(deps: SprintActionDeps<E>): Record<string, 
       // The project comes from the stored task, not from the request.
       const a = await authorize(tools, userId, task.data.record.data.projectId, 'task.write')
       if (!a.ok) return a.res.error === 'Project not found' ? fail('Task not found', 'not_found') : a.res
-      const members = new Set((await activeMembers(tools, a.projectId)).map((m) => String(m.data.userId)))
+      const members = new Set((await activeMembers(tools, a.projectId)).map((m) => String(m.data.UserId)))
       const { taskId: _t, projectId: _p, ...patch } = params
       const parsed = parseTaskPatch(patch, members, { partial: true })
       if (!parsed.ok) return fail(parsed.error, 'bad_request')

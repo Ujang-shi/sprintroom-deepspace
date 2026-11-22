@@ -1,7 +1,7 @@
 # SprintRoom on DeepSpace
 
 Migration of the original Node/SSE prototype (`../sprintroom`) to the official DeepSpace SDK (`deepspace@0.44.2`).
-Scaffolded with `npm create deepspace@latest` (starter template). **Not deployed.**
+Scaffolded with `npm create deepspace@latest` (starter template). **Not deployed.** Registered as `app_01M80N6R3Q48X85XZAFT6JD49E`; source: GitHub `Ujang-shi/sprintroom-deepspace` (private).
 
 ## What is implemented (and verified how)
 
@@ -51,8 +51,28 @@ git add -A && git commit -m "SprintRoom"
 npx deepspace deploy
 ```
 
-## Decisions needed before first deploy
+## Verified results (local dev server, real DeepSpace login and platform)
 
-* **Source authority:** the first source-producing action permanently picks DeepSpace-hosted git or a GitHub remote. Default here is DeepSpace source.
-* **App name/subdomain** (`name` in `wrangler.toml`, currently `sprintroom-deepspace`).
-* **AI billing:** insights are user-billed. A user with no credits gets the rule-based fallback and a toast.
+| Check | Result |
+|---|---|
+| SDK |  installed and CLI 0.44.2 |
+| ,  | clean |
+|  (vite build + prerender) | succeeds |
+| Unit tests (vitest) | 31/31 pass (RBAC matrix, actions with in-memory tools, schema lint) |
+|  (smoke, api, collab, sprintroom, insights) | 13/13 pass |
+| Auth | two real  accounts sign in, each browser shows its own identity |
+| Record sync + RBAC | non-member sees nothing; invited viewer sees the project **live**, sees tasks created by the owner live, has no write controls |
+| Presence | owner sees the  indicator while the guest is connected |
+| AI insights | real call reached the DeepSpace AI proxy; the throwaway test account has no credits, so the proxy returned 402 and the app **fell back to rule-based insights** as designed. **The success path (AI-written narrative) is NOT yet verified.** |
+
+Not verified: server-side rejection of a viewer's direct action call is covered by unit tests only (the e2e checks that the controls are hidden); AI success path; production behavior (nothing is deployed).
+
+### SDK quirk worked around
+The Durable Object tells a connected user to re-subscribe when their  row changes, but it reads the user id from a key named . The membership column is therefore named  (not ); with  a newly invited user had to reload to see the project.
+
+## Source authority
+ currently reports **unclaimed**. It latches permanently on first use: a deploy with a GitHub remote claims GitHub.  is the private GitHub repo, and  must not be run (it would claim DeepSpace). Deploy only from a clean checkout of .
+
+## Decisions needed before first deploy
+* **Deployment approval** (not given yet).
+* **AI billing:** insights are user-billed; a user with no credits gets the rule-based fallback.
