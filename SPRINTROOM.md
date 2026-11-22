@@ -7,12 +7,12 @@ Scaffolded with `npm create deepspace@latest` (starter template). **Not deployed
 
 | # | DeepSpace capability | Where | Status |
 |---|---|---|---|
-| 1 | **Native authentication** (`DeepSpaceAuthProvider`, `AuthOverlay`, `useAuth`, `signOut`, verified JWT on every action) | `src/pages/(app)/_layout.tsx`, `src/sprintroom/Workspace.tsx`, `src/actions` | Implemented. Replaces the insecure display-name cookie login. **Not yet verified in a browser** (needs login, see below). |
-| 2 | **Persistent real-time records** (`RecordRoom` Durable Object, `useQuery` live subscriptions) | `src/schemas/sprint-schemas.ts`, `Workspace.tsx` | Implemented. Replaces `db.json` + SSE. Schema passes the SDK linter (unit test). **Live sync not yet verified in a browser.** |
+| 1 | **Native authentication** (`DeepSpaceAuthProvider`, `AuthOverlay`, `useAuth`, `signOut`, verified JWT on every action) | `src/pages/(app)/_layout.tsx`, `src/sprintroom/Workspace.tsx`, `src/actions` | Implemented. Replaces the insecure display-name cookie login. Verified with two real test accounts (see Verified results). |
+| 2 | **Persistent real-time records** (`RecordRoom` Durable Object, `useQuery` live subscriptions) | `src/schemas/sprint-schemas.ts`, `Workspace.tsx` | Implemented. Replaces `db.json` + SSE. Schema passes the SDK linter (unit test). Live sync verified with two accounts. |
 | 3 | **Project-level RBAC** (`team_members` + `'team'` read level + role-checked server actions) | schemas + `src/actions/sprint-actions.ts`, `src/lib/sprint.ts` | Implemented. Unit-tested (see matrix). |
 | 4 | **Multiplayer synchronization** (record subscriptions broadcast by the DO) | `Workspace.tsx` | Implemented; same mechanism as #2. |
-| 5 | **Presence** (`usePresenceRoom('project:<id>')`: online teammates, who has a task open) | `Workspace.tsx` | Implemented; **not yet verified with two live sessions.** |
-| 6 | **AI Sprint Insights** (`createDeepSpaceAI(env,'anthropic',{authToken})` + `generateText`, `claude-haiku-5-5`, billed to the calling user's credits, persisted in `sprint_insights`, falls back to the original rule engine) | `src/actions/index.ts`, `sprint-actions.ts` | Implemented; AI call is mocked in unit tests, **never run against the real model.** |
+| 5 | **Presence** (`usePresenceRoom('project:<id>')`: online teammates, who has a task open) | `Workspace.tsx` | Implemented; verified with two live sessions. |
+| 6 | **AI Sprint Insights** (`createDeepSpaceAI(env,'anthropic',{authToken})` + `generateText`, `claude-haiku-5-5`, billed to the calling user's credits, persisted in `sprint_insights`, falls back to the original rule engine) | `src/actions/index.ts`, `sprint-actions.ts` | Implemented; AI call is mocked in unit tests; the real call returned 402 (no credits on the test account), so only the fallback is verified. |
 | 7 | **Server actions** (`/api/actions/<name>`, RBAC-bypassing tools used only after an explicit role check) | `src/actions/` | Implemented, unit-tested with an in-memory tools fake. |
 
 Not used: payments, messaging, file uploads, cron, jobs, Yjs, external integrations (`integrations.ts` untouched).
@@ -55,23 +55,23 @@ npx deepspace deploy
 
 | Check | Result |
 |---|---|
-| SDK |  installed and CLI 0.44.2 |
-| ,  | clean |
-|  (vite build + prerender) | succeeds |
+| SDK | `deepspace@0.44.2` installed, CLI 0.44.2 |
+| `npm run type-check`, `npm run lint` | clean |
+| `npm run build` (vite build + prerender) | succeeds |
 | Unit tests (vitest) | 31/31 pass (RBAC matrix, actions with in-memory tools, schema lint) |
-|  (smoke, api, collab, sprintroom, insights) | 13/13 pass |
-| Auth | two real  accounts sign in, each browser shows its own identity |
-| Record sync + RBAC | non-member sees nothing; invited viewer sees the project **live**, sees tasks created by the owner live, has no write controls |
-| Presence | owner sees the  indicator while the guest is connected |
-| AI insights | real call reached the DeepSpace AI proxy; the throwaway test account has no credits, so the proxy returned 402 and the app **fell back to rule-based insights** as designed. **The success path (AI-written narrative) is NOT yet verified.** |
+| `deepspace test run all` (smoke, api, collab, sprintroom, insights) | 13/13 pass |
+| Auth | two real `@deepspace.test` accounts sign in; each browser shows its own identity |
+| Record sync + RBAC | a non-member sees nothing; an invited viewer sees the project **live**, sees the owner's new tasks live, and has no write controls |
+| Presence | the owner sees the "N online now" indicator while the guest is connected |
+| AI insights | the real call reached the DeepSpace AI proxy; the throwaway test account has no credits, so the proxy returned 402 and the app **fell back to rule-based insights** as designed. **The success path (AI-written narrative) is NOT yet verified.** |
 
-Not verified: server-side rejection of a viewer's direct action call is covered by unit tests only (the e2e checks that the controls are hidden); AI success path; production behavior (nothing is deployed).
+Not verified: server-side rejection of a viewer's direct action call (unit tests only; the e2e checks that the controls are hidden), the AI success path, and anything in production (nothing is deployed).
 
 ### SDK quirk worked around
-The Durable Object tells a connected user to re-subscribe when their  row changes, but it reads the user id from a key named . The membership column is therefore named  (not ); with  a newly invited user had to reload to see the project.
+The Durable Object tells a connected user to re-subscribe when their `team_members` row changes, but it reads the user id from a key named `UserId`. The membership column is therefore named `UserId` (not `userId`); with `userId`, a newly invited user had to reload to see the project.
 
 ## Source authority
- currently reports **unclaimed**. It latches permanently on first use: a deploy with a GitHub remote claims GitHub.  is the private GitHub repo, and  must not be run (it would claim DeepSpace). Deploy only from a clean checkout of .
+`deepspace app source` currently reports **unclaimed**. It latches permanently on first use: a deploy with a GitHub remote claims GitHub. `origin` is the private GitHub repo. Do not run `deepspace push` (it would claim DeepSpace). Deploy only from a clean checkout of `main`.
 
 ## Decisions needed before first deploy
 * **Deployment approval** (not given yet).
