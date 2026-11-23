@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { AuthOverlay, getUserColor, signOut, useAuth, usePresenceRoom, useQuery, useUser } from 'deepspace'
 import { callAction } from '../lib/actions'
+import { inviteWithRetry } from '../lib/invite'
 import { can, computeInsights, type ProjectRole } from '../lib/sprint'
 import './sprintroom.css'
 
@@ -41,6 +42,7 @@ type ModalState =
   | { kind: 'project' }
   | { kind: 'task'; task?: Task }
   | { kind: 'members' }
+  | { kind: 'delete' }
   | null
 
 export default function Workspace() {
@@ -162,6 +164,7 @@ function SignedInWorkspace({ userId }: { userId: string }) {
                   {peers.length > 0 && <span className="tag" data-testid="presence-count">{peers.length} online now</span>}
                   <button className="btn secondary" id="invite" onClick={() => setModal({ kind: 'members' })}>{isOwner ? '+ Member' : 'Team'}</button>
                   {canWrite && <button className="btn" id="newtask" onClick={() => setModal({ kind: 'task' })}>+ New Task</button>}
+                  {isOwner && <button className="btn danger" id="delete-project" onClick={() => setModal({ kind: 'delete' })}>Delete project</button>}
                 </div>
               </div>
               <div className="stats">
@@ -239,7 +242,19 @@ function SignedInWorkspace({ userId }: { userId: string }) {
       )}
 
       {modal?.kind === 'members' && projectId && (
-        <MembersModal projectId={projectId} members={members} isOwner={isOwner} me={userId} onClose={() => setModal(null)} onError={setToast} />
+        <MembersModal projectId={projectId} members={members} isOwner={isOwner} me={userId} onClose={() => setModal(null)} onError={setToast} onNotice={setToast} />
+      )}
+
+      {modal?.kind === 'delete' && projectId && active && isOwner && (
+        <DeleteProjectModal
+          name={active.data.name} taskCount={tasks.length} memberCount={members.length}
+          onClose={() => setModal(null)}
+          onDelete={async () => {
+            await callAction('deleteProject', { projectId })
+            setActiveId(null)
+            setToast(`Deleted project "${active.data.name}"`)
+          }}
+        />
       )}
 
       {toast && <div className="sr-toast" role="status">{toast}</div>}
@@ -247,29 +262,34 @@ function SignedInWorkspace({ userId }: { userId: string }) {
   )
 }
 
-function Modal({ title, children, onClose, onSubmit, submitLabel = 'Save changes', extraActions, readOnly }: {
-  title: string; children: ReactNode; onClose: () => void; onSubmit?: (f: FormData) => Promise<unknown>
-  submitLabel?: string; extraActions?: ReactNode; readOnly?: boolean
+function Modal({ title, children, onClose, onSubmit, submitLabel = 'Save changes', busyLabel = 'Saving…', submitClass = 'btn', submitDisabled, extraActions, readOnly }: {
+  title: string; children: ReactNode; onClose: () => void
+  /** `setStatus` shows a progress line (e.g. "Waiting for…") while the request runs. */
+  onSubmit?: (f: FormData, setStatus: (s: string | null) => void) => Promise<unknown>
+  submitLabel?: string; busyLabel?: string; submitClass?: string; submitDisabled?: boolean
+  extraActions?: ReactNode; readOnly?: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!onSubmit) return
-    setBusy(true); setErr(null)
-    try { await onSubmit(new FormData(e.currentTarget)); onClose() } catch (x) { setErr(x instanceof Error ? x.message : 'Failed'); setBusy(false) }
+    if (!onSubmit || busy) return
+    setBusy(true); setErr(null); setStatus(null)
+    try { await onSubmit(new FormData(e.currentTarget), setStatus); onClose() } catch (x) { setErr(x instanceof Error ? x.message : 'Failed'); setStatus(null); setBusy(false) }
   }
   return (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal" role="dialog" aria-modal="true">
+    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose() }}>
+      <div className="modal" role="dialog" aria-modal="true" aria-busy={busy}>
         <h2>{title}</h2>
         <form onSubmit={submit}>
           {children}
-          {err && <p className="flag" role="alert">{err}</p>}
+          {busy && <p className="muted" role="status" data-testid="modal-status">{status ?? busyLabel}</p>}
+          {err && <p className="flag" role="alert" data-testid="modal-error">{err}</p>}
           <div className="modal-actions">
             {extraActions}
-            <button type="button" className="btn secondary" onClick={onClose}>{readOnly || !onSubmit ? 'Close' : 'Cancel'}</button>
-            {onSubmit && !readOnly && <button className="btn" type="submit" disabled={busy}>{submitLabel}</button>}
+            <button type="button" className="btn secondary" onClick={onClose} disabled={busy}>{readOnly || !onSubmit ? 'Close' : 'Cancel'}</button>
+            {onSubmit && !readOnly && <button className={submitClass} type="submit" disabled={busy || submitDisabled}>{busy ? busyLabel : submitLabel}</button>}
           </div>
         </form>
       </div>
@@ -318,9 +338,36 @@ function TaskModal({ task: t, projectId, members, canWrite, onClose, onError }: 
   )
 }
 
-function MembersModal({ projectId, members, isOwner, me, onClose, onError }: {
+/** Owner-only, irreversible. The owner must type the project name before the button enables. The server
+ *  independently re-checks that the caller is the project owner (`project.delete`). */
+function DeleteProjectModal({ name, taskCount, memberCount, onClose, onDelete }: {
+  name: string; taskCount: number; memberCount: number; onClose: () => void; onDelete: () => Promise<unknown>
+}) {
+  const [typed, setTyped] = useState('')
+  return (
+    <Modal
+      title="Delete project?"
+      onClose={onClose}
+      onSubmit={onDelete}
+      submitLabel="Delete project"
+      busyLabel="Deleting…"
+      submitClass="btn danger"
+      submitDisabled={typed.trim() !== name}
+    >
+      <p>
+        This permanently deletes <strong>{name}</strong>, its {taskCount} {taskCount === 1 ? 'task' : 'tasks'} and its
+        insights, and removes access for all {memberCount} {memberCount === 1 ? 'member' : 'members'}. This cannot be undone.
+      </p>
+      <label className="field">Type the project name to confirm
+        <input name="confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+      </label>
+    </Modal>
+  )
+}
+
+function MembersModal({ projectId, members, isOwner, me, onClose, onError, onNotice }: {
   projectId: string; members: { userId: string; name?: string; role: ProjectRole }[]; isOwner: boolean; me: string
-  onClose: () => void; onError: (m: string) => void
+  onClose: () => void; onError: (m: string) => void; onNotice: (m: string) => void
 }) {
   const act = async (name: string, params: Record<string, unknown>) => {
     try { await callAction(name, { projectId, ...params }) } catch (e) { onError(e instanceof Error ? e.message : 'Failed') }
@@ -330,8 +377,13 @@ function MembersModal({ projectId, members, isOwner, me, onClose, onError }: {
       title={isOwner ? 'Manage team' : 'Project team'}
       onClose={onClose}
       submitLabel="Add member"
-      onSubmit={isOwner ? async (f) => {
-        await callAction('addMember', { projectId, identifier: f.get('identifier'), role: f.get('role') })
+      busyLabel="Adding…"
+      onSubmit={isOwner ? async (f, setStatus) => {
+        const added = await inviteWithRetry(
+          () => callAction<{ name?: string; role: string }>('addMember', { projectId, identifier: f.get('identifier'), role: f.get('role') }),
+          setStatus,
+        )
+        onNotice(`Added ${added.name || 'teammate'} as ${ROLE_LABEL[added.role as ProjectRole] ?? added.role}`)
       } : undefined}
     >
       <div data-testid="member-list">

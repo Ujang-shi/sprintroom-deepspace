@@ -211,6 +211,47 @@ describe('AI Sprint Insights', () => {
   })
 })
 
+describe('deleteProject authorization', () => {
+  it('refuses viewers, editors and non-members, and keeps every row', async () => {
+    const { tools, db, projectId } = await world()
+    await run('createTask', alice, { projectId, title: 'T' }, tools)
+    for (const who of [bob, carol, mallory]) {
+      const r = await run('deleteProject', who, { projectId }, tools)
+      expect(r.success).toBe(false)
+      // non-members must not learn the project exists
+      expect(r).toMatchObject({ code: who === mallory ? 'not_found' : 'forbidden' })
+    }
+    expect(db.projects.size).toBe(1)
+    expect(db.tasks.size).toBe(1)
+    expect(db.team_members.size).toBe(3)
+  })
+
+  it('ignores a client-supplied owner/role claim', async () => {
+    const { tools, db, projectId } = await world()
+    const r = await run('deleteProject', carol, { projectId, role: 'owner', ownerId: carol }, tools)
+    expect(r).toMatchObject({ success: false, code: 'forbidden' })
+    expect(db.projects.size).toBe(1)
+  })
+
+  it('is idempotent-safe: deleting an already deleted project is not_found', async () => {
+    const { tools, projectId } = await world()
+    expect((await run('deleteProject', alice, { projectId }, tools)).success).toBe(true)
+    expect(await run('deleteProject', alice, { projectId }, tools)).toMatchObject({ success: false, code: 'not_found' })
+  })
+})
+
+describe('addMember result', () => {
+  it('returns the display name for the UI confirmation and a clear user_not_found message', async () => {
+    const { tools, projectId } = await world()
+    const ok = await run('addMember', alice, { projectId, identifier: 'mallory@x.test', role: 'viewer' }, tools)
+    expect(ok).toMatchObject({ success: true, data: { role: 'viewer' } })
+    expect((ok.data as { name: string }).name).toBeTruthy()
+    const missing = await run('addMember', alice, { projectId, identifier: 'ghost@x.test', role: 'viewer' }, tools)
+    expect(missing).toMatchObject({ success: false, code: 'user_not_found' })
+    expect(missing.error).toMatch(/sign in once/)
+  })
+})
+
 describe('deleteProject', () => {
   it('owner cascades tasks, insights and memberships; editor cannot', async () => {
     const { tools, db, projectId } = await world()

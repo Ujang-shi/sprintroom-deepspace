@@ -149,7 +149,7 @@ export function makeSprintActions<E>(deps: SprintActionDeps<E>): Record<string, 
       if (role === 'owner' || !(PROJECT_ROLES as readonly string[]).includes(role)) return fail('Role must be editor or viewer', 'bad_request')
       let found = await tools.query<Row>('users', { where: { email: ident.toLowerCase() }, limit: 2 })
       if (!found.success || found.data.records.length === 0) found = await tools.query<Row>('users', { where: { name: ident }, limit: 2 })
-      if (!found.success || found.data.records.length === 0) return fail('Ask your teammate to sign in once first', 'user_not_found')
+      if (!found.success || found.data.records.length === 0) return fail('No SprintRoom user matches that email or name yet. Ask your teammate to open SprintRoom and sign in once, then try again.', 'user_not_found')
       if (found.data.records.length > 1) return fail('More than one user matches - use their email', 'ambiguous')
       const target = found.data.records[0]
       const existing = await getRole(tools, a.projectId, target.recordId)
@@ -159,7 +159,7 @@ export function makeSprintActions<E>(deps: SprintActionDeps<E>): Record<string, 
         { teamId: a.projectId, UserId: target.recordId, status: 'active', role, name: sanitize(target.data.name || target.data.email || target.recordId) },
         memberId(a.projectId, target.recordId),
       )
-      return res.success ? ok({ userId: target.recordId, role }) : res
+      return res.success ? ok({ userId: target.recordId, role, name: sanitize(target.data.name || target.data.email || target.recordId) }) : res
     },
 
     setMemberRole: async ({ userId, params, tools }) => {

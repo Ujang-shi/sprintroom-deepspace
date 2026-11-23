@@ -7,6 +7,16 @@ export interface ActionResponse<T = unknown> {
   code?: string
 }
 
+/** Error from a server action; `code` is the action's machine-readable code (e.g. user_not_found). */
+export class ActionError extends Error {
+  code?: string
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'ActionError'
+    this.code = code
+  }
+}
+
 /** Call a server action (POST /api/actions/<name>) with the signed-in user's JWT. */
 export async function callAction<T = unknown>(name: string, params: Record<string, unknown>): Promise<T> {
   const token = await getAuthToken()
@@ -22,6 +32,6 @@ export async function callAction<T = unknown>(name: string, params: Record<strin
   } catch {
     throw new Error(`Request failed (${res.status})`)
   }
-  if (!res.ok || !body.success) throw new Error(body.error || `Request failed (${res.status})`)
+  if (!res.ok || !body.success) throw new ActionError(body.error || `Request failed (${res.status})`, body.code)
   return body.data as T
 }

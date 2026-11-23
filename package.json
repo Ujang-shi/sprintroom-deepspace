@@ -22,6 +22,7 @@
     "test:api": "deepspace test run api",
     "test:e2e": "deepspace test run e2e",
     "test:unit": "vitest run --passWithNoTests",
+    "smoke:prod": "node scripts/prod-smoke.mjs",
     "test:watch": "vitest",
     "validate": "tsc --noEmit && vitest run --passWithNoTests",
     "screenshot": "deepspace test screenshot",

@@ -1,7 +1,7 @@
 # SprintRoom on DeepSpace
 
 Migration of the original Node/SSE prototype (`../sprintroom`) to the official DeepSpace SDK (`deepspace@0.44.2`).
-Scaffolded with `npm create deepspace@latest` (starter template). **Not deployed.** Registered as `app_01M80N6R3Q48X85XZAFT6JD49E`; source: GitHub `Ujang-shi/sprintroom-deepspace` (private).
+Scaffolded with `npm create deepspace@latest` (starter template). **Deployed** at https://sprintroom-deepspace.app.space (newer code on `main` is not yet deployed; see DEPLOY_CHECKLIST.md). Registered as `app_01M80N6R3Q48X85XZAFT6JD49E`; source: GitHub `Ujang-shi/sprintroom-deepspace` (private).
 
 ## What is implemented (and verified how)
 
@@ -42,7 +42,7 @@ Roles per project (stored in `team_members.role`): **owner** (everything, incl. 
 npx deepspace auth login            # interactive terminal, GitHub/Google OAuth
 npx deepspace app init --json       # registers the app, mints DEEPSPACE_APP_ID in wrangler.toml
 npm run type-check && npm run lint
-npm run test:unit                   # vitest (28 tests)
+npm run test:unit                   # vitest (42 tests)
 npx deepspace test run              # smoke + api (needs login)
 npx deepspace test run all          # + e2e (needs 2 test accounts)
 npx deepspace dev start
@@ -51,28 +51,11 @@ git add -A && git commit -m "SprintRoom"
 npx deepspace deploy
 ```
 
-## Verified results (local dev server, real DeepSpace login and platform)
-
-| Check | Result |
-|---|---|
-| SDK | `deepspace@0.44.2` installed, CLI 0.44.2 |
-| `npm run type-check`, `npm run lint` | clean |
-| `npm run build` (vite build + prerender) | succeeds |
-| Unit tests (vitest) | 31/31 pass (RBAC matrix, actions with in-memory tools, schema lint) |
-| `deepspace test run all` (smoke, api, collab, sprintroom, insights) | 13/13 pass |
-| Auth | two real `@deepspace.test` accounts sign in; each browser shows its own identity |
-| Record sync + RBAC | a non-member sees nothing; an invited viewer sees the project **live**, sees the owner's new tasks live, and has no write controls |
-| Presence | the owner sees the "N online now" indicator while the guest is connected |
-| AI insights | the real call reached the DeepSpace AI proxy; the throwaway test account has no credits, so the proxy returned 402 and the app **fell back to rule-based insights** as designed. **The success path (AI-written narrative) is NOT yet verified.** |
-
-Not verified: server-side rejection of a viewer's direct action call (unit tests only; the e2e checks that the controls are hidden), the AI success path, and anything in production (nothing is deployed).
+## Verification and status
+See **DEPLOY_CHECKLIST.md** for the current deployment status, the exact test results (42 unit tests, e2e, production smoke, the production AI check) and the remaining limitations. Behavior additions since the first deploy (local, undeployed): invite progress/success/error with a bounded retry for a teammate who just signed in, and an owner-only Delete Project action with a typed-name confirmation.
 
 ### SDK quirk worked around
 The Durable Object tells a connected user to re-subscribe when their `team_members` row changes, but it reads the user id from a key named `UserId`. The membership column is therefore named `UserId` (not `userId`); with `userId`, a newly invited user had to reload to see the project.
 
 ## Source authority
-`deepspace app source` currently reports **unclaimed**. It latches permanently on first use: a deploy with a GitHub remote claims GitHub. `origin` is the private GitHub repo. Do not run `deepspace push` (it would claim DeepSpace). Deploy only from a clean checkout of `main`.
-
-## Decisions needed before first deploy
-* **Deployment approval** (not given yet).
-* **AI billing:** insights are user-billed; a user with no credits gets the rule-based fallback.
+GitHub (`ujang-shi/sprintroom-deepspace`), latched by the first deploy. Do not run `deepspace push`. Deploy only from a clean checkout of `main`.
