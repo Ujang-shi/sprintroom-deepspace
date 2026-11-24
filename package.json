@@ -23,6 +23,7 @@
     "test:e2e": "deepspace test run e2e",
     "test:unit": "vitest run --passWithNoTests",
     "smoke:prod": "node scripts/prod-smoke.mjs",
+    "smoke:prod:race": "node scripts/prod-invite-race.mjs",
     "test:watch": "vitest",
     "validate": "tsc --noEmit && vitest run --passWithNoTests",
     "screenshot": "deepspace test screenshot",

@@ -26,20 +26,25 @@ npx deepspace test run all      # unit + smoke + api + e2e (e2e needs test accou
 ```
 End-to-end specs need two `@deepspace.test` accounts named `ada` and `grace`; without them those specs skip:
 ```bash
-printf '%s' "<password>" | npx deepspace test accounts create --email sprintroom-ada@deepspace.test   --name ada   --label sprintroom-e2e --password-stdin
-printf '%s' "<password>" | npx deepspace test accounts create --email sprintroom-grace@deepspace.test --name grace --label sprintroom-e2e --password-stdin
+printf '%s' "<password>" | npx deepspace test accounts create --email sprintroom-ada-<unique>@deepspace.test   --name ada   --label sprintroom-e2e --password-stdin
+printf '%s' "<password>" | npx deepspace test accounts create --email sprintroom-grace-<unique>@deepspace.test --name grace --label sprintroom-e2e --password-stdin
 # remove later:  npx deepspace test accounts clear --label sprintroom-e2e --yes
 ```
+Use a **new unique email each time**: deleting a test account does not delete its app user record in production, so reusing an email makes invites fail as "ambiguous".
 
 ## Production checks (saved scripts)
 ```bash
-npm run smoke:prod                              # 9-step two-account smoke test against the live URL (cleans up after itself)
+npm run smoke:prod                              # 10-step two-account smoke test against the live URL (ends by deleting its project)
+npm run smoke:prod:race                         # invites a brand-new account the instant it opens the app (needs a third account named hana)
 RUN_REAL_AI=1 node scripts/prod-ai-check.mjs    # ONE real AI request on your own credits; opt-in, never buys credits
 ```
 `SMOKE_URL` overrides the target; `SMOKE_OWNER` / `SMOKE_VIEWER` pick the accounts.
 
 ## Deploy
 Commit and push to `main`, then `npx deepspace deploy` from a clean checkout. Do **not** run `deepspace push` (it would claim DeepSpace as source). See [DEPLOY_CHECKLIST.md](DEPLOY_CHECKLIST.md) for status, results and limitations, and [SPRINTROOM.md](SPRINTROOM.md) for the architecture and RBAC model.
+
+## Submission
+See [SUBMISSION.md](SUBMISSION.md) for the requirements mapping, native-vs-external breakdown and the split between agent-run tests and owner verification.
 
 ## Limitations
 See the "Remaining limitations" section of [DEPLOY_CHECKLIST.md](DEPLOY_CHECKLIST.md).

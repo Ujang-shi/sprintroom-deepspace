@@ -11,9 +11,10 @@
  *   printf '%s' "<password>" | npx deepspace test accounts create --email sprintroom-ada@deepspace.test   --name ada   --label sprintroom-e2e --password-stdin
  *   printf '%s' "<password>" | npx deepspace test accounts create --email sprintroom-grace@deepspace.test --name grace --label sprintroom-e2e --password-stdin
  *
- * Checks: 1 auth, 2 create project+tasks, 3 live sync + presence, 4 viewer cannot mutate (UI and API),
- * 5 persistence after reload, 6 AI insights (real model if the account has credits, else rule-based fallback).
- * It never buys credits. The test project is always deleted at the end (owner-only deleteProject).
+ * Checks: 1 auth, 2 create project+tasks, 3 invite feedback (error, success) + live sync + presence, 4 viewer cannot
+ * mutate (UI and API), 5 persistence after reload, 6 AI insights (real model if the account has credits, else
+ * rule-based fallback), 7 owner-only Delete Project through the UI. It never buys credits. The test project is deleted
+ * by step 7 (or by an API fallback if the run stops early).
  * Exit code 0 only if every step passed.
  */
 import { chromium } from '@playwright/test'
@@ -62,6 +63,7 @@ const action = async (token, name, params) =>
 const project = `PROD-SMOKE ${Date.now()}`
 const browser = await chromium.launch()
 let po, pv, projectId, ownerToken
+let deleted = false
 
 try {
   await step('1. both users authenticate', async () => {
@@ -85,14 +87,21 @@ try {
     if (await pv.getByText(project).count()) throw new Error('non-member can see the project')
   })
 
-  await step('3a. invite viewer; project appears live in the other session (no reload)', async () => {
-    const added = po.waitForResponse((r) => r.url().includes('/api/actions/addMember'))
+  await step('3a. invite feedback: progress + clear error for an unknown user, then success toast and live appearance', async () => {
     await po.locator('#invite').click()
+    await po.getByLabel('Email or exact display name').fill('nobody-here@deepspace.test')
+    await po.getByRole('button', { name: 'Add member' }).click()
+    await visible(po.getByTestId('modal-status'))
+    await po.getByTestId('modal-error').waitFor({ state: 'visible', timeout: 15000 })
+    if (!/sign in once/i.test(await po.getByTestId('modal-error').innerText())) throw new Error('unclear error text')
+    if (!(await po.getByRole('button', { name: 'Add member' }).isEnabled())) throw new Error('dialog left disabled after error')
+    const added = po.waitForResponse((r) => r.url().includes('/api/actions/addMember') && r.request().postData()?.includes(viewer.email))
     await po.getByLabel('Email or exact display name').fill(viewer.email)
     await po.locator('select[name=role]').selectOption('viewer')
     await po.getByRole('button', { name: 'Add member' }).click()
     const body = await (await added).json()
     if (!body.success) throw new Error(`addMember failed: ${body.code} ${body.error}`)
+    await visible(po.getByRole('status').filter({ hasText: /Added .* as Viewer/ }))
     await visible(pv.getByRole('button', { name: new RegExp(project) }))
     await pv.getByRole('button', { name: new RegExp(project) }).click()
     await visible(pv.getByRole('heading', { name: project }))
@@ -160,10 +169,30 @@ try {
     await visible(po.getByTestId('insights').getByText(tag, { exact: true }), 15000)
     return `source=${body.data.source}${body.data.aiError ? ' aiError=' + body.data.aiError : ''}; UI tag "${tag}"`
   })
+
+  await step('7. owner-only Delete Project via UI: typed confirmation, live removal, persists after reload', async () => {
+    await po.locator('#delete-project').click()
+    const confirm = po.getByRole('button', { name: 'Delete project', exact: true }).last()
+    if (!(await confirm.isDisabled())) throw new Error('delete enabled without confirmation')
+    await po.getByRole('button', { name: 'Cancel' }).click()
+    await visible(po.getByRole('heading', { name: project }))
+    await po.locator('#delete-project').click()
+    await po.getByLabel('Type the project name to confirm').fill(project.slice(0, -1))
+    if (!(await confirm.isDisabled())) throw new Error('delete enabled with a wrong name')
+    await po.getByLabel('Type the project name to confirm').fill(project)
+    await confirm.click()
+    await visible(po.getByRole('status').filter({ hasText: `Deleted project "${project}"` }))
+    await po.getByRole('button', { name: new RegExp(project) }).waitFor({ state: 'detached', timeout: 15000 })
+    await pv.getByRole('button', { name: new RegExp(project) }).waitFor({ state: 'detached', timeout: 15000 })
+    deleted = true
+    await Promise.all([po.reload(), pv.reload()])
+    await Promise.all([visible(po.getByTestId('workspace')), visible(pv.getByTestId('workspace'))])
+    for (const p of [po, pv]) if (await p.getByRole('button', { name: new RegExp(project) }).count()) throw new Error('project reappeared after reload')
+  })
 } catch (e) {
   console.log('STOPPED:', String(e.message).split('\n')[0])
 } finally {
-  if (projectId && ownerToken) {
+  if (projectId && ownerToken && !deleted) {
     try {
       const r = await action(ownerToken, 'deleteProject', { projectId })
       console.log('CLEANUP deleteProject:', r.success ? 'ok' : JSON.stringify(r))
